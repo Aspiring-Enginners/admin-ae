@@ -2,6 +2,67 @@ import apiClient, { handleApiError } from "./api.client";
 
 export type TestStatus = "draft" | "published";
 
+// Admin endpoint response shape
+export interface AdminQuestionOption {
+  id?: string;
+  text?: string;
+}
+
+export interface AdminQuestion {
+  id: string;
+  index: number;
+  questionText: string;
+  questionType: 'single-correct' | 'multi-correct' | 'integer' | string;
+  questionImageUrl?: string | null;
+  options: string[] | AdminQuestionOption[];
+  correctAnswer?: string | null;
+  correctAnswers?: string[];
+  numericalAnswer?: number | null;
+  tolerance?: number | null;
+  solutionText?: string;
+  solutionImageUrl?: string | null;
+  category?: string;
+  chapter?: string;
+  topic?: string;
+  difficulty?: string;
+  metadata?: { marks?: number };
+}
+
+export interface AdminTestData {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  type: 'mock' | 'practice' | 'previous_year' | string;
+  status: TestStatus;
+  duration: number;
+  totalMarks: number;
+  marksPerQuestion: number;
+  negativeMarking: number;
+  totalQuestions: number;
+  shuffleQuestions: boolean;
+  isPaid: boolean;
+  price?: number;
+  packageId?: string;
+  packageName?: string;
+  difficulty?: string;
+  subjects?: string[];
+  syllabus?: string[];
+  instructions?: string[];
+  sections?: any[];
+  thumbnail?: string | null;
+  assignedTo?: string[];
+  questions: AdminQuestion[];
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminTestResponse {
+  success: boolean;
+  data: AdminTestData;
+}
+
 export interface CreateTestPayload {
   title: string;
   description: string;
@@ -262,6 +323,30 @@ export const testService = {
         return raw["data"] as unknown as Test;
       }
       return raw as unknown as Test;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  getTestByIdAdmin: async (id: string): Promise<AdminTestData> => {
+    try {
+      const response = await apiClient.get<AdminTestResponse>(`/tests/${id}/admin`);
+      return response.data.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  updateTestAdmin: async (
+    id: string,
+    data: Partial<CreateTestPayload> & { questions?: string[] }
+  ): Promise<AdminTestData> => {
+    try {
+      const response = await apiClient.patch<AdminTestResponse>(
+        `/tests/${id}`,
+        data
+      );
+      return response.data.data;
     } catch (error) {
       throw new Error(handleApiError(error));
     }

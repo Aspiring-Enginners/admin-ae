@@ -1,58 +1,586 @@
-// app/test-series/[id]/edit/page.tsx
 "use client";
 
-import React from "react";
-import { useParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { QuestionSelector } from "@/components/TestSeries/QuestionSelector";
+import { Question } from "@/lib/types";
+import { testService, AdminQuestion } from "@/lib/services/test.service";
+import { toast } from "sonner";
+import { Plus, Trash2, GripVertical, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { QuestionRenderer } from "@/components/QuestionRenderer";
+
+// Validation schema
+const testSeriesSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+  category: z.string().min(1, "Category is required"),
+  duration: z.number().min(1, "Duration must be at least 1 minute"),
+  marksPerQuestion: z.number().min(1, "Marks per question must be at least 1"),
+  negativeMarking: z.number(),
+  status: z.enum(["draft", "published"]),
+  type: z.enum(["mock", "practice", "previous_year"]),
+  shuffleQuestions: z.boolean(),
+  isPaid: z.boolean().optional(),
+  price: z.number().optional(),
+  packageId: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
+type TestSeriesFormValues = z.infer<typeof testSeriesSchema>;
+
+// Adapter: AdminQuestion → pseudo-Question for the list UI
+interface SelectedQuestion {
+  _id: string;
+  order: number;
+  questionText: string;
+  questionType: string;
+  category?: string;
+  chapter?: string;
+  topic?: string;
+  difficulty?: string;
+  metadata: { marks: number };
+  // keep the rest for QuestionSelector compatibility
+  [key: string]: unknown;
+}
+
+function adminQuestionToSelected(q: AdminQuestion, order: number): SelectedQuestion {
+  return {
+    ...q,
+    _id: q.id, // admin endpoint uses `id`, not `_id`
+    order,
+    metadata: { marks: q.metadata?.marks ?? 4 },
+  };
+}
 
 export default function EditTestSeriesPage() {
+  const router = useRouter();
   const params = useParams();
-  const testId = params.id;
+  const testId = params.id as string;
+
+  const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
+  const [showQuestionSelector, setShowQuestionSelector] = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+    reset,
+  } = useForm<TestSeriesFormValues>({
+    resolver: zodResolver(testSeriesSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      category: "",
+      duration: 180,
+      marksPerQuestion: 4,
+      negativeMarking: -1,
+      status: "draft",
+      type: "mock",
+      shuffleQuestions: true,
+      isPaid: false,
+      price: 0,
+      packageId: "",
+    },
+  });
+
+  // ──────────────────────────────────────────────
+  // Fetch test data from GET /tests/:id/admin
+  // ──────────────────────────────────────────────
+  useEffect(() => {
+    const fetchTestDetails = async () => {
+      if (!testId) return;
+      try {
+        const test = await testService.getTestByIdAdmin(testId);
+
+        reset({
+          title: test.title,
+          description: test.description ?? "",
+          category: test.category,
+          duration: test.duration,
+          marksPerQuestion: test.marksPerQuestion,
+          negativeMarking: test.negativeMarking,
+          status: test.status,
+          type: (test.type as "mock" | "practice" | "previous_year") ?? "mock",
+          shuffleQuestions: test.shuffleQuestions,
+          isPaid: test.isPaid ?? false,
+          price: test.price ?? 0,
+          packageId: test.packageId ?? "",
+        });
+
+        // Questions come back as full objects from the admin endpoint
+        if (test.questions && test.questions.length > 0) {
+          const hydrated = test.questions.map((q, i) =>
+            adminQuestionToSelected(q, i + 1)
+          );
+          setSelectedQuestions(hydrated);
+        }
+      } catch (error: unknown) {
+        toast.error("Failed to load test details", {
+          description: error instanceof Error ? error.message : "Unknown error",
+        });
+      } finally {
+        setLoadingInitial(false);
+      }
+    };
+    fetchTestDetails();
+  }, [testId, reset]);
+
+  // ──────────────────────────────────────────────
+  // Question list handlers
+  // ──────────────────────────────────────────────
+  const handleAddQuestion = (question: Question) => {
+    const newQuestion: SelectedQuestion = {
+      ...question,
+      _id: question._id,
+      questionType: (question as unknown as { questionType?: string }).questionType ?? "single-correct",
+      order: selectedQuestions.length + 1,
+      metadata: { marks: (question.metadata as { marks?: number })?.marks ?? 4 },
+    };
+    setSelectedQuestions([...selectedQuestions, newQuestion]);
+    setShowQuestionSelector(false);
+    toast.success("Question added to test");
+  };
+
+  const handleRemoveQuestion = (index: number) => {
+    const updated = selectedQuestions
+      .filter((_, i) => i !== index)
+      .map((q, i) => ({ ...q, order: i + 1 }));
+    setSelectedQuestions(updated);
+  };
+
+  // ──────────────────────────────────────────────
+  // Submit → PATCH /tests/:id/admin
+  // ──────────────────────────────────────────────
+  const onSubmit = async (data: TestSeriesFormValues) => {
+    if (selectedQuestions.length === 0) {
+      toast.error("Please add at least one question");
+      return;
+    }
+
+    try {
+      const payload = {
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        questions: selectedQuestions.map((q) => q._id),
+        duration: data.duration,
+        marksPerQuestion: data.marksPerQuestion,
+        negativeMarking: data.negativeMarking,
+        status: data.status,
+        type: data.type,
+        shuffleQuestions: data.shuffleQuestions,
+        ...(data.isPaid !== undefined && { isPaid: data.isPaid }),
+        ...(data.price !== undefined && data.price > 0 && { price: data.price }),
+        ...(data.packageId && { packageId: data.packageId }),
+        ...(data.startDate && { startDate: data.startDate }),
+        ...(data.endDate && { endDate: data.endDate }),
+      };
+
+      await testService.updateTestAdmin(testId, payload);
+
+      toast.success("Test updated successfully!");
+      router.push("/test-series");
+    } catch (error: unknown) {
+      toast.error("Failed to update test", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  };
+
+  // ──────────────────────────────────────────────
+  // Loading state
+  // ──────────────────────────────────────────────
+  if (loadingInitial) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6 bg-gray-50">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Edit Test</h1>
+            <p className="text-gray-500 mt-1">
+              Update existing test details and questions
+            </p>
+          </div>
           <Link href="/test-series">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Test Series
+            <Button variant="outline" className="flex items-center gap-2">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Tests
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Edit Test Series</h1>
-            <p className="text-gray-500 mt-1">Test ID: {testId}</p>
-          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Edit Test Series Form</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="p-8 text-center text-gray-500">
-              <p className="text-lg font-medium">Test Series Edit Form</p>
-              <p className="mt-2">
-                This page will reuse the test series creation form with pre-filled data.
-              </p>
-              <p className="mt-4 text-sm">
-                Fetches test details from:
-                <code className="block mt-2 p-2 bg-gray-100 rounded">
-                  GET /api/admin/test-series/{testId}
-                </code>
-              </p>
-              <p className="mt-4 text-sm">
-                Submits updates to:
-                <code className="block mt-2 p-2 bg-gray-100 rounded">
-                  PUT /api/admin/test-series/{testId}
-                </code>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* ── Basic Details ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Basic Details</CardTitle>
+              <CardDescription>
+                Update the basic information for this test
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Test Title *</Label>
+                  <Input
+                    id="title"
+                    placeholder="JEE Main 2025 Mock Test 1"
+                    {...register("title")}
+                  />
+                  {errors.title && (
+                    <p className="text-sm text-red-600">{errors.title.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="category">Category *</Label>
+                  <Input
+                    id="category"
+                    placeholder="NEET, JEE, JEE_MAIN, etc."
+                    {...register("category")}
+                  />
+                  {errors.category && (
+                    <p className="text-sm text-red-600">{errors.category.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description *</Label>
+                <textarea
+                  id="description"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="Full length mock test covering Physics, Chemistry, and Mathematics"
+                  {...register("description")}
+                />
+                {errors.description && (
+                  <p className="text-sm text-red-600">{errors.description.message}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="duration">Duration (minutes) *</Label>
+                  <Input
+                    id="duration"
+                    type="number"
+                    {...register("duration", { valueAsNumber: true })}
+                  />
+                  {errors.duration && (
+                    <p className="text-sm text-red-600">{errors.duration.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="marksPerQuestion">Marks Per Question *</Label>
+                  <Input
+                    id="marksPerQuestion"
+                    type="number"
+                    {...register("marksPerQuestion", { valueAsNumber: true })}
+                  />
+                  {errors.marksPerQuestion && (
+                    <p className="text-sm text-red-600">
+                      {errors.marksPerQuestion.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="negativeMarking">Negative Marking</Label>
+                  <Input
+                    id="negativeMarking"
+                    type="number"
+                    placeholder="-1"
+                    {...register("negativeMarking", { valueAsNumber: true })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="type">Test Type *</Label>
+                  <Select
+                    onValueChange={(value) => setValue("type", value as TestSeriesFormValues["type"])}
+                    value={watch("type")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mock">Mock Test</SelectItem>
+                      <SelectItem value="practice">Practice Test</SelectItem>
+                      <SelectItem value="previous_year">Previous Year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status *</Label>
+                  <Select
+                    onValueChange={(value) => setValue("status", value as TestSeriesFormValues["status"])}
+                    value={watch("status")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="published">Published</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startDate">Start Date (Optional)</Label>
+                  <Input
+                    id="startDate"
+                    type="datetime-local"
+                    {...register("startDate")}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="endDate">End Date (Optional)</Label>
+                  <Input
+                    id="endDate"
+                    type="datetime-local"
+                    {...register("endDate")}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="shuffleQuestions"
+                  checked={watch("shuffleQuestions")}
+                  onCheckedChange={(checked) =>
+                    setValue("shuffleQuestions", checked as boolean)
+                  }
+                />
+                <Label htmlFor="shuffleQuestions" className="cursor-pointer">
+                  Shuffle Questions
+                </Label>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Pricing / Package ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Pricing & Package</CardTitle>
+              <CardDescription>
+                Configure payment settings for this test
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="isPaid"
+                  checked={watch("isPaid") ?? false}
+                  onCheckedChange={(checked) =>
+                    setValue("isPaid", checked as boolean)
+                  }
+                />
+                <Label htmlFor="isPaid" className="cursor-pointer">
+                  Paid Test
+                </Label>
+              </div>
+
+              {watch("isPaid") && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Price (₹)</Label>
+                    <Input
+                      id="price"
+                      type="number"
+                      placeholder="1999"
+                      {...register("price", { valueAsNumber: true })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="packageId">Package ID</Label>
+                    <Input
+                      id="packageId"
+                      placeholder="jee-main-2025-complete-season-1"
+                      {...register("packageId")}
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Questions ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Questions ({selectedQuestions.length})</CardTitle>
+                  <CardDescription>
+                    Manage questions for this test
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => setShowQuestionSelector(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Question
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {selectedQuestions.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <p>No questions added yet</p>
+                  <p className="text-sm mt-1">
+                    Click &quot;Add Question&quot; to select from question bank
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-sm text-gray-600 mb-4">
+                    Total Marks:{" "}
+                    {selectedQuestions.length * watch("marksPerQuestion")}
+                  </div>
+                  {selectedQuestions.map((q, index) => (
+                    <div
+                      key={`${q._id}-${index}`}
+                      className="flex items-center gap-3 p-4 border rounded-lg bg-white"
+                    >
+                      <GripVertical className="w-4 h-4 text-gray-400 cursor-move" />
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-semibold text-gray-700">
+                            Q{q.order}
+                          </span>
+                          {q.category && (
+                            <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded">
+                              {q.category as string}
+                            </span>
+                          )}
+                          {q.chapter && (
+                            <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded">
+                              {q.chapter as string}
+                            </span>
+                          )}
+                          {q.difficulty && (
+                            <span
+                              className={`px-2 py-1 text-xs rounded ${
+                                String(q.difficulty).toUpperCase() === "EASY"
+                                  ? "bg-green-100 text-green-700"
+                                  : String(q.difficulty).toUpperCase() === "MEDIUM"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {q.difficulty as string}
+                            </span>
+                          )}
+                        </div>
+                        {q.topic && (
+                          <p className="text-sm text-gray-600 mb-2">
+                            {q.topic as string}
+                          </p>
+                        )}
+                        <div className="text-sm text-gray-900 line-clamp-2">
+                          <QuestionRenderer content={q.questionText} />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 px-3 py-2 bg-gray-100 rounded">
+                          {q.metadata.marks || watch("marksPerQuestion")} marks
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveQuestion(index)}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Submit ── */}
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push("/test-series")}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSubmitting || selectedQuestions.length === 0}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </div>
+        </form>
+
+        {/* Question Selector Modal */}
+        {showQuestionSelector && (
+          <QuestionSelector
+            onSelect={handleAddQuestion}
+            onClose={() => setShowQuestionSelector(false)}
+            selectedQuestionIds={selectedQuestions.map((q) => q._id)}
+          />
+        )}
       </div>
     </div>
   );
