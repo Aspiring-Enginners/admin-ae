@@ -59,6 +59,8 @@ export interface ApiError {
 export interface QuestionOption {
   text: string;
   isCorrect?: boolean;
+  imageUrl?: string;
+  imageBase64?: string; // Keep for backward compatibility/payload
 }
 
 export interface QuestionMetadata {
@@ -71,13 +73,17 @@ export interface Question {
   category: string;
   chapter: string;
   topic: string;
+  questionType?: 'single-correct' | 'multi-correct' | 'integer' | 'numerical';
   questionText: string;
-  options: { text: string }[];
-  correctAnswer: string;
+  options: { text: string; imageBase64?: string; imageUrl?: string }[];
+  correctAnswer?: string;
+  correctAnswers?: string[];
   solutionText: string;
   questionImageBase64?: string | null;
+  questionImageUrl?: string | null;
   solutionImageBase64?: string | null;
-  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  solutionImageUrl?: string | null;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD' | 'easy' | 'medium' | 'hard';
   metadata: QuestionMetadata;
   createdAt: string;
   updatedAt: string;
@@ -88,12 +94,13 @@ export interface CreateQuestionPayload {
   chapter: string;
   topic: string;
   questionText: string;
-  options: { text: string }[];
+  questionType?: 'single-correct' | 'multi-correct' | 'integer' | 'numerical';
+  options: { text: string; imageBase64?: string }[];
   correctAnswer: string;
   solutionText: string;
   questionImageBase64?: string | null;
   solutionImageBase64?: string | null;
-  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD' | 'easy' | 'medium' | 'hard';
   metadata: QuestionMetadata;
 }
 
@@ -120,7 +127,7 @@ export interface QuestionFilters {
   category?: string;
   chapter?: string;
   topic?: string;
-  difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+  difficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'easy' | 'medium' | 'hard';
   search?: string;
   page?: number;
   limit?: number;
