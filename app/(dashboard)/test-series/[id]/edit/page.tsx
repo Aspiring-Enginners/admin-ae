@@ -163,7 +163,7 @@ export default function EditTestSeriesPage() {
       metadata: { marks: (question.metadata as { marks?: number })?.marks ?? 4 },
     };
     setSelectedQuestions([...selectedQuestions, newQuestion]);
-    setShowQuestionSelector(false);
+    // setShowQuestionSelector(false); // BUG: Don't close after adding
     toast.success("Question added to test");
   };
 
@@ -324,6 +324,7 @@ export default function EditTestSeriesPage() {
                   <Input
                     id="negativeMarking"
                     type="number"
+                    step="any"
                     placeholder="-1"
                     {...register("negativeMarking", { valueAsNumber: true })}
                   />
