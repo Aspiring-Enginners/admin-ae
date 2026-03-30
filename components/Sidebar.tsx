@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   BookOpen,
   FileText,
+  BriefcaseBusiness,
   Image as ImageIcon,
   ListChecks,
   HelpCircle,
@@ -106,6 +107,12 @@ const navItems: NavItem[] = [
         path: "/internships/applications",
       },
     ],
+  },
+
+  {
+    name: "Freelance",
+    icon: BriefcaseBusiness,
+    path: "/freelance",
   },
   
   // Support Group
