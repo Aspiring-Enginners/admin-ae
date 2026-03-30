@@ -26,6 +26,7 @@ import {
   Users,
   UsersRound,
   Mail,
+  Gift,
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useState } from "react";
@@ -43,6 +44,7 @@ const navItems: NavItem[] = [
   { name: "All Users", icon: UsersRound, path: "/users" },
   { name: "Question Bank", icon: HelpCircle, path: "/questions" },
   { name: "Newsletter", icon: Mail, path: "/newsletter" },
+  { name: "Refer & Earn", icon: Gift, path: "/referrals" },
   { name: "Test Series", icon: ListChecks, path: "/test-series" },
   { name: "Manual Enrollment", icon: Users, path: "/enrollments/manual" },
   { name: "Team Members", icon: UserPlus, path: "/team-members" },
