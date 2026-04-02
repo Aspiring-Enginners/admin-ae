@@ -75,6 +75,8 @@ const EXAM_PATTERNS: Record<string, { questionCount: number; duration: number; s
 };
 
 export default function TestSeriesPage() {
+  type StatusFilter = "all" | "UPCOMING" | "LIVE" | "COMPLETED";
+
   const [tests, setTests] = useState<TestListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -96,9 +98,7 @@ export default function TestSeriesPage() {
     subjectQuestionCounts: {},
   });
 
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "UPCOMING" | "LIVE" | "COMPLETED"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -205,6 +205,13 @@ export default function TestSeriesPage() {
       return "expired" as const;
     }
     return "draft" as const;
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    const validStatuses: StatusFilter[] = ["all", "UPCOMING", "LIVE", "COMPLETED"];
+    if (validStatuses.includes(value as StatusFilter)) {
+      setStatusFilter(value as StatusFilter);
+    }
   };
 
   const submitAutoCreate = async () => {
@@ -326,12 +333,7 @@ export default function TestSeriesPage() {
               className="max-w-xs"
             />
             <span className="text-sm font-medium text-gray-700">Status:</span>
-            <Select
-              value={statusFilter}
-              onValueChange={(value) =>
-                setStatusFilter(value as "all" | "UPCOMING" | "LIVE" | "COMPLETED")
-              }
-            >
+            <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
               <SelectTrigger className="w-48">
                 <SelectValue />
               </SelectTrigger>
