@@ -1,0 +1,875 @@
+================================================================================
+  CERTIFICATE MODULE — FULL API REFERENCE
+  Project: Aspiring Engineers Backend (NestJS + MongoDB)
+  Base URL: https://api.theaspiringengineers.com  (or your local http://localhost:3000)
+================================================================================
+
+AUTHENTICATION
+--------------
+All secured endpoints require a Bearer token in the Authorization header:
+  Authorization: Bearer <JWT_TOKEN>
+
+Admin endpoints additionally require the authenticated user to have role = "admin".
+
+
+DOMAIN VALUES (CertDomain enum)
+--------------------------------
+  "web-dev"  → Web Development          → Code: WEB
+  "app-dev"  → App Development          → Code: APP
+  "cloud"    → Cloud Computing          → Code: CLD
+  "devops"   → DevOps Engineering       → Code: OPS
+
+
+REQUEST STATUS VALUES (RequestStatus enum)
+------------------------------------------
+  "pending"   — Awaiting admin review
+  "approved"  — Admin approved, certificate generated
+  "rejected"  — Admin rejected the request
+
+
+CERTIFICATE ID FORMAT
+---------------------
+  Public ID  : TAE-XXXXXXXXXXXX   (12 random alphanumeric chars, e.g. TAE-AB3XY7QZLM4N)
+  Cert Number: TAE-{CODE}-{YEAR}-{SEQ6}  (e.g. TAE-WEB-2026-000001)
+
+
+================================================================================
+  SECTION 1 — USER ENDPOINTS  (prefix: /certificates)
+  Auth: JWT required  |  Role: any authenticated user
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1.1  POST /certificates/request
+     Submit a certificate request for a domain
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : Any logged-in user
+
+Request Headers:
+  Content-Type: application/json
+  Authorization: Bearer <JWT_TOKEN>
+
+Request Body:
+  {
+    "domain": "web-dev"
+  }
+
+  Field   | Type   | Required | Values
+  --------|--------|----------|------------------------------------------
+  domain  | string | YES      | "web-dev" | "app-dev" | "cloud" | "devops"
+
+Success Response  201 Created:
+  {
+    "success": true,
+    "message": "Certificate request submitted successfully. Pending admin review.",
+    "data": {
+      "_id": "6630a1f2e4b0c8d1234abcd1",
+      "userId": "6610abc123def456789",
+      "domain": "web-dev",
+      "status": "pending",
+      "rejectionReason": null,
+      "adminId": null,
+      "reviewedAt": null,
+      "createdAt": "2026-04-26T10:00:00.000Z",
+      "updatedAt": "2026-04-26T10:00:00.000Z"
+    }
+  }
+
+Error Responses:
+  409 Conflict — Pending request already exists for this domain:
+    {
+      "statusCode": 409,
+      "message": "You already have a pending certificate request for this domain.",
+      "error": "Conflict"
+    }
+
+  409 Conflict — Certificate already issued for this domain:
+    {
+      "statusCode": 409,
+      "message": "You already have a certificate for this domain.",
+      "error": "Conflict"
+    }
+
+  400 Bad Request — Invalid domain value:
+    {
+      "statusCode": 400,
+      "message": ["domain must be one of: web-dev, app-dev, cloud, devops"],
+      "error": "Bad Request"
+    }
+
+  401 Unauthorized — Missing or invalid JWT:
+    {
+      "statusCode": 401,
+      "message": "Unauthorized"
+    }
+
+
+────────────────────────────────────────────────────────────────────────────────
+1.2  GET /certificates/my
+     Get all certificates issued to the logged-in user
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : Any logged-in user
+
+Request Headers:
+  Authorization: Bearer <JWT_TOKEN>
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Certificates retrieved successfully",
+    "data": [
+      {
+        "_id": "6630b2e3f1a2b3c4d5e6f7a8",
+        "userId": "6610abc123def456789",
+        "domain": "web-dev",
+        "domainCode": "WEB",
+        "certificateId": "TAE-AB3XY7QZLM4N",
+        "certificateNumber": "TAE-WEB-2026-000001",
+        "fileUrl": "https://storage.googleapis.com/.../cert-TAE-AB3XY7QZLM4N.png",
+        "qrUrl": "https://www.theaspiringengineers.com/archive/TAE-AB3XY7QZLM4N",
+        "issuedAt": "2026-04-26T10:05:00.000Z",
+        "createdAt": "2026-04-26T10:05:00.000Z",
+        "updatedAt": "2026-04-26T10:05:00.000Z"
+      }
+    ]
+  }
+
+  Returns an empty array [] if user has no certificates.
+
+
+────────────────────────────────────────────────────────────────────────────────
+1.3  GET /certificates/my/requests
+     Get all certificate requests made by the logged-in user
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : Any logged-in user
+
+Request Headers:
+  Authorization: Bearer <JWT_TOKEN>
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Certificate requests retrieved successfully",
+    "data": [
+      {
+        "_id": "6630a1f2e4b0c8d1234abcd1",
+        "userId": "6610abc123def456789",
+        "domain": "web-dev",
+        "status": "pending",
+        "rejectionReason": null,
+        "adminId": null,
+        "reviewedAt": null,
+        "createdAt": "2026-04-26T10:00:00.000Z",
+        "updatedAt": "2026-04-26T10:00:00.000Z"
+      },
+      {
+        "_id": "6630a1f2e4b0c8d1234abcd2",
+        "userId": "6610abc123def456789",
+        "domain": "devops",
+        "status": "rejected",
+        "rejectionReason": "Insufficient course completion",
+        "adminId": "6610xyz999abc111222",
+        "reviewedAt": "2026-04-25T08:30:00.000Z",
+        "createdAt": "2026-04-24T09:00:00.000Z",
+        "updatedAt": "2026-04-25T08:30:00.000Z"
+      }
+    ]
+  }
+
+
+================================================================================
+  SECTION 2 — ADMIN ENDPOINTS  (prefix: /admin/certificates)
+  Auth: JWT required  |  Role: "admin"
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+2.1  GET /admin/certificates/requests
+     List all certificate requests (filterable by status)
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+Request Headers:
+  Authorization: Bearer <JWT_TOKEN>
+
+Query Parameters:
+  Name    | Type   | Required | Description
+  --------|--------|----------|---------------------------------------------
+  status  | string | NO       | Filter by status: pending | approved | rejected
+  
+  Examples:
+    GET /admin/certificates/requests              → all requests
+    GET /admin/certificates/requests?status=pending  → pending only
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Certificate requests retrieved successfully",
+    "data": [
+      {
+        "_id": "6630a1f2e4b0c8d1234abcd1",
+        "userId": {
+          "_id": "6610abc123def456789",
+          "name": "Ayush Rana",
+          "email": "ayush@example.com",
+          "identifier": "ayush_rana_001"
+        },
+        "domain": "web-dev",
+        "status": "pending",
+        "rejectionReason": null,
+        "adminId": null,
+        "reviewedAt": null,
+        "createdAt": "2026-04-26T10:00:00.000Z",
+        "updatedAt": "2026-04-26T10:00:00.000Z"
+      }
+    ]
+  }
+
+
+────────────────────────────────────────────────────────────────────────────────
+2.2  GET /admin/certificates/issued
+     List all issued certificates (filterable by domain)
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+Request Headers:
+  Authorization: Bearer <JWT_TOKEN>
+
+Query Parameters:
+  Name    | Type   | Required | Description
+  --------|--------|----------|---------------------------------------------
+  domain  | string | NO       | Filter by domain: web-dev | app-dev | cloud | devops
+
+  Examples:
+    GET /admin/certificates/issued                    → all issued certificates
+    GET /admin/certificates/issued?domain=web-dev     → web-dev only
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Issued certificates retrieved successfully",
+    "data": [
+      {
+        "_id": "6630b2e3f1a2b3c4d5e6f7a8",
+        "userId": {
+          "_id": "6610abc123def456789",
+          "name": "Ayush Rana",
+          "email": "ayush@example.com",
+          "identifier": "ayush_rana_001"
+        },
+        "domain": "web-dev",
+        "domainCode": "WEB",
+        "certificateId": "TAE-AB3XY7QZLM4N",
+        "certificateNumber": "TAE-WEB-2026-000001",
+        "fileUrl": "https://storage.googleapis.com/bucket/certificates/cert-TAE-AB3XY7QZLM4N.png",
+        "qrUrl": "https://www.theaspiringengineers.com/archive/TAE-AB3XY7QZLM4N",
+        "issuedAt": "2026-04-26T10:05:00.000Z",
+        "createdAt": "2026-04-26T10:05:00.000Z",
+        "updatedAt": "2026-04-26T10:05:00.000Z"
+      }
+    ]
+  }
+
+  Returns an empty array [] if no certificates have been issued yet.
+
+
+────────────────────────────────────────────────────────────────────────────────
+2.3  POST /admin/certificates/:requestId/approve
+     Approve a certificate request — generates and stores the certificate PNG
+────────────────────────────────────────────────────────────────────────────────
+
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+URL Params:
+  requestId  — MongoDB ObjectId of the CertificateRequest document
+
+Request Headers:
+  Authorization: Bearer <JWT_TOKEN>
+
+Request Body: (none — no body required)
+
+What happens internally:
+  1. Fetches the CertificateRequest by requestId
+  2. Validates request is not "rejected"
+  3. Checks idempotency (if already approved, returns existing cert)
+  4. Generates unique certificateId (TAE-XXXXXXXXXXXX)
+  5. Atomically increments counter → certificateNumber (TAE-WEB-2026-000001)
+  6. Fetches the currently active template from DB (null = use built-in default SVG)
+  7. Renders certificate PNG using active template mode:
+       mode=default → built-in premium dark SVG
+       mode=image   → admin's background image + SVG text overlay
+       mode=html    → admin's HTML with {{tokens}} replaced, rendered via SVG foreignObject
+  8. Uploads PNG to storage bucket (folder: certificates/)
+  9. Saves Certificate document to MongoDB
+  10. Updates CertificateRequest status → "approved"
+  11. Returns the created Certificate document
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Certificate approved and generated successfully.",
+    "data": {
+      "_id": "6630b2e3f1a2b3c4d5e6f7a8",
+      "userId": "6610abc123def456789",
+      "domain": "web-dev",
+      "domainCode": "WEB",
+      "certificateId": "TAE-AB3XY7QZLM4N",
+      "certificateNumber": "TAE-WEB-2026-000001",
+      "fileUrl": "https://storage.googleapis.com/bucket/certificates/cert-TAE-AB3XY7QZLM4N.png",
+      "qrUrl": "https://www.theaspiringengineers.com/archive/TAE-AB3XY7QZLM4N",
+      "issuedAt": "2026-04-26T10:05:00.000Z",
+      "createdAt": "2026-04-26T10:05:00.000Z",
+      "updatedAt": "2026-04-26T10:05:00.000Z"
+    }
+  }
+
+Error Responses:
+  404 Not Found — requestId does not exist:
+    {
+      "statusCode": 404,
+      "message": "Certificate request not found.",
+      "error": "Not Found"
+    }
+
+  400 Bad Request — Request is already rejected:
+    {
+      "statusCode": 400,
+      "message": "Cannot approve a rejected request.",
+      "error": "Bad Request"
+    }
+
+  403 Forbidden — Non-admin user:
+    {
+      "statusCode": 403,
+      "message": "Forbidden resource",
+      "error": "Forbidden"
+    }
+
+
+────────────────────────────────────────────────────────────────────────────────
+2.3  POST /admin/certificates/:requestId/reject
+     Reject a certificate request
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+URL Params:
+  requestId  — MongoDB ObjectId of the CertificateRequest document
+
+Request Headers:
+  Content-Type: application/json
+  Authorization: Bearer <JWT_TOKEN>
+
+Request Body:
+  {
+    "rejectionReason": "The user has not completed the required coursework."
+  }
+
+  Field            | Type   | Required | Notes
+  -----------------|--------|----------|-----------------------------
+  rejectionReason  | string | NO       | Max 500 chars. Can be omitted.
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Request rejected successfully."
+  }
+
+Error Responses:
+  404 Not Found:
+    { "statusCode": 404, "message": "Certificate request not found.", "error": "Not Found" }
+
+  400 Bad Request — Not in pending status:
+    { "statusCode": 400, "message": "Request is already approved.", "error": "Bad Request" }
+
+
+────────────────────────────────────────────────────────────────────────────────
+2.4  POST /admin/certificates/issue-direct   ★ NEW ENDPOINT TO IMPLEMENT ★
+     Admin directly issues a certificate for any user (bypasses request flow)
+     Use case: Admin panel "Generate Certificate" without user completing module
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+Request Headers:
+  Content-Type: application/json
+  Authorization: Bearer <JWT_TOKEN>
+
+Request Body:
+  {
+    "email": "learner@example.com",
+    "domain": "web-dev",
+    "overrideName": "Ayush Rana"
+  }
+
+  Field         | Type   | Required | Notes
+  --------------|--------|----------|----------------------------------------------
+  email         | string | YES      | Email of the target user
+  domain        | string | YES      | One of: web-dev | app-dev | cloud | devops
+  overrideName  | string | NO       | If set, uses this name on the certificate
+                |        |          | instead of the name from the User document
+
+What happens internally:
+  1. Validate email + domain
+  2. Look up user by email
+  3. Check if a certificate already exists for the user+domain → 409 if so
+  4. Generate certificateId (TAE-XXXXXXXXXXXX)
+  5. Generate certificateNumber (TAE-WEB-2026-000001) via counter
+  6. Fetch active template
+  7. Render certificate PNG
+  8. Upload PNG to storage
+  9. Save Certificate document
+  10. Create a CertificateRequest document (status: "approved") for audit trail
+  11. Return the Certificate document
+
+Success Response  201 Created:
+  {
+    "success": true,
+    "message": "Certificate issued directly by admin.",
+    "data": {
+      "_id": "6630b2e3f1a2b3c4d5e6f7a8",
+      "userId": "6610abc123def456789",
+      "domain": "web-dev",
+      "domainCode": "WEB",
+      "certificateId": "TAE-AB3XY7QZLM4N",
+      "certificateNumber": "TAE-WEB-2026-000001",
+      "fileUrl": "https://storage.googleapis.com/bucket/certificates/cert-TAE-AB3XY7QZLM4N.png",
+      "qrUrl": "https://www.theaspiringengineers.com/archive/TAE-AB3XY7QZLM4N",
+      "issuedAt": "2026-04-26T10:05:00.000Z",
+      "createdAt": "2026-04-26T10:05:00.000Z",
+      "updatedAt": "2026-04-26T10:05:00.000Z"
+    }
+  }
+
+Error Responses:
+  404 Not Found — userId not found:
+    { "statusCode": 404, "message": "User not found.", "error": "Not Found" }
+
+  409 Conflict — Certificate already exists:
+    { "statusCode": 409, "message": "Certificate already issued for this user and domain.", "error": "Conflict" }
+
+  400 Bad Request — Invalid field:
+    { "statusCode": 400, "message": ["domain must be one of: ..."], "error": "Bad Request" }
+
+  403 Forbidden — Non-admin user:
+    { "statusCode": 403, "message": "Forbidden resource", "error": "Forbidden" }
+
+
+================================================================================
+  SECTION 3 — PUBLIC ENDPOINT  (prefix: /archive)
+  Auth: NONE required  |  Publicly accessible
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+3.1  GET /archive/:certificateId
+     Verify a certificate by its public ID (no auth required)
+     Called when user/anyone scans the QR code on the certificate
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : None (public endpoint, @Public() decorator)
+URL    : https://api.theaspiringengineers.com/archive/TAE-AB3XY7QZLM4N
+
+URL Params:
+  certificateId  — Public certificate ID (format: TAE-XXXXXXXXXXXX)
+
+Request Body: (none)
+
+Success Response  200 OK — Valid certificate:
+  {
+    "success": true,
+    "data": {
+      "status": "valid",
+      "name": "Ayush Rana",
+      "domain": "web-dev",
+      "certificateNumber": "TAE-WEB-2026-000001",
+      "issuedAt": "2026-04-26T10:05:00.000Z"
+    }
+  }
+
+Success Response  200 OK — Invalid/unknown ID:
+  {
+    "success": true,
+    "data": {
+      "status": "invalid",
+      "message": "No certificate found with this ID."
+    }
+  }
+
+NOTE: This endpoint always returns HTTP 200. The "status" field in data indicates
+      validity. This is intentional — the QR scanner/frontend always gets a
+      structured response rather than a 404 error page.
+
+
+================================================================================
+  SECTION 4 — ADMIN TEMPLATE ENDPOINTS  (prefix: /admin/certificate-templates)
+  Auth: JWT required  |  Role: "admin"
+
+  TEMPLATE MODES
+  --------------
+  "default"  Built-in premium dark SVG. No extra fields required.
+  "image"    Admin uploads a PNG/JPG background; text is composited over it via SVG.
+             Best size: 1200x850 px.
+  "html"     Admin supplies HTML with {{placeholder}} tokens. Rendered to PNG via
+             SVG foreignObject. Design for 1200x850 px viewport.
+
+  AVAILABLE HTML TOKENS
+  ---------------------
+  {{userName}}          {{courseName}}        {{certificateNumber}}
+  {{certificateId}}     {{issuedDate}}        {{startDate}}
+  {{endDate}}           {{qrDataUrl}}
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+4.1  POST /admin/certificate-templates
+     Upload / create a certificate template
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+Request Headers:
+  Content-Type: application/json
+  Authorization: Bearer <JWT_TOKEN>
+
+Request Body — mode "default" (no upload needed):
+  {
+    "name": "Premium Dark SVG",
+    "mode": "default"
+  }
+
+Request Body — mode "image" (PNG/JPG background):
+  {
+    "name": "Custom Brand Template",
+    "mode": "image",
+    "backgroundImageBase64": "data:image/png;base64,iVBORw0KGgo..."
+  }
+
+Request Body — mode "html" (custom HTML layout):
+  {
+    "name": "HTML Layout v1",
+    "mode": "html",
+    "htmlTemplate": "<div style='width:1200px;height:850px;background:#1a1a2e;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;'><h1>{{userName}}</h1><h2>{{courseName}}</h2><p>Certificate No: {{certificateNumber}}</p><p>Issued: {{issuedDate}}</p><img src='{{qrDataUrl}}' width='120'/></div>"
+  }
+
+  Field                  | Type   | Required        | Notes
+  -----------------------|--------|-----------------|--------------------------------------------
+  name                   | string | YES             | 2-100 chars, human-readable label
+  mode                   | string | YES             | "default" | "image" | "html"
+  backgroundImageBase64  | string | if mode=image   | PNG/JPG/WebP base64 (with or without data URI prefix)
+  htmlTemplate           | string | if mode=html    | Full HTML with {{token}} placeholders
+
+Success Response  201 Created:
+  {
+    "success": true,
+    "message": "Template created. Use the activate endpoint to make it live.",
+    "data": {
+      "_id": "6640a1b2c3d4e5f6a7b8c9d0",
+      "name": "Custom Brand Template",
+      "mode": "image",
+      "backgroundImageUrl": "https://storage.googleapis.com/bucket/certificate-templates/cert-bg-uuid.png",
+      "htmlTemplate": null,
+      "isActive": false,
+      "createdBy": "6610abc123def456789",
+      "createdAt": "2026-04-27T00:00:00.000Z",
+      "updatedAt": "2026-04-27T00:00:00.000Z"
+    }
+  }
+
+Error Responses:
+  400 — backgroundImageBase64 missing for mode=image:
+    { "statusCode": 400, "message": "backgroundImageBase64 is required when mode is \"image\".", "error": "Bad Request" }
+
+  400 — htmlTemplate missing for mode=html:
+    { "statusCode": 400, "message": "htmlTemplate is required when mode is \"html\".", "error": "Bad Request" }
+
+  400 — Invalid mode value:
+    { "statusCode": 400, "message": ["mode must be one of: default, image, html"], "error": "Bad Request" }
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.2  GET /admin/certificate-templates
+     List all templates (htmlTemplate body excluded for brevity)
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "data": [
+      {
+        "_id": "6640a1b2c3d4e5f6a7b8c9d0",
+        "name": "Custom Brand Template",
+        "mode": "image",
+        "backgroundImageUrl": "https://storage.googleapis.com/bucket/certificate-templates/cert-bg-uuid.png",
+        "isActive": true,
+        "createdBy": "6610abc123def456789",
+        "createdAt": "2026-04-27T00:00:00.000Z",
+        "updatedAt": "2026-04-27T00:00:00.000Z"
+      },
+      {
+        "_id": "6640b2c3d4e5f6a7b8c9d0e1",
+        "name": "HTML Layout v1",
+        "mode": "html",
+        "backgroundImageUrl": null,
+        "isActive": false,
+        "createdBy": "6610abc123def456789",
+        "createdAt": "2026-04-26T12:00:00.000Z",
+        "updatedAt": "2026-04-26T12:00:00.000Z"
+      }
+    ]
+  }
+
+NOTE: htmlTemplate field is excluded from list response (can be large).
+      Use GET /admin/certificate-templates/:id to retrieve it.
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.3  GET /admin/certificate-templates/:id
+     Get full template detail including htmlTemplate content
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+URL Params:
+  id  — MongoDB ObjectId of the CertificateTemplate document
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "data": {
+      "_id": "6640b2c3d4e5f6a7b8c9d0e1",
+      "name": "HTML Layout v1",
+      "mode": "html",
+      "backgroundImageUrl": null,
+      "htmlTemplate": "<div style='width:1200px;height:850px;...'><h1>{{userName}}</h1>...</div>",
+      "isActive": false,
+      "createdBy": "6610abc123def456789",
+      "createdAt": "2026-04-26T12:00:00.000Z",
+      "updatedAt": "2026-04-26T12:00:00.000Z"
+    }
+  }
+
+Error Response:
+  404: { "statusCode": 404, "message": "Certificate template not found.", "error": "Not Found" }
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.4  PUT /admin/certificate-templates/:id/activate
+     Activate a template — all future certificates will use it
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+URL Params:
+  id  — MongoDB ObjectId of the CertificateTemplate document
+
+Request Body: (none)
+
+What happens internally:
+  1. Finds the template by id
+  2. Sets isActive=false on ALL other templates (atomic)
+  3. Sets isActive=true on this template
+  4. Next certificate generation will use this template's mode
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Template \"Custom Brand Template\" is now active. Future certificates will use this template.",
+    "data": {
+      "_id": "6640a1b2c3d4e5f6a7b8c9d0",
+      "name": "Custom Brand Template",
+      "mode": "image",
+      "backgroundImageUrl": "https://storage.googleapis.com/bucket/certificate-templates/cert-bg-uuid.png",
+      "isActive": true,
+      "createdAt": "2026-04-27T00:00:00.000Z",
+      "updatedAt": "2026-04-27T00:05:00.000Z"
+    }
+  }
+
+Error Response:
+  404: { "statusCode": 404, "message": "Certificate template not found.", "error": "Not Found" }
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.5  PUT /admin/certificate-templates/reset-default
+     Deactivate all templates — revert to built-in premium SVG
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "All templates deactivated. Built-in default SVG will be used."
+  }
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.6  DELETE /admin/certificate-templates/:id
+     Delete a template (cannot delete the active one)
+────────────────────────────────────────────────────────────────────────────────
+
+Auth   : Required (Bearer JWT)
+Role   : admin
+
+URL Params:
+  id  — MongoDB ObjectId of the CertificateTemplate document
+
+Request Body: (none)
+
+Success Response  200 OK:
+  {
+    "success": true,
+    "message": "Template deleted successfully."
+  }
+
+Error Responses:
+  400 — Tried to delete the active template:
+    { "statusCode": 400, "message": "Cannot delete the active template. Activate another template first.", "error": "Bad Request" }
+
+  404 — Template not found:
+    { "statusCode": 404, "message": "Certificate template not found.", "error": "Not Found" }
+
+
+================================================================================
+  SECTION 5 — QUICK REFERENCE TABLE
+================================================================================
+
+  Method | Path                                       | Auth   | Role  | Description
+  -------|--------------------------------------------|--------|-------|---------------------------
+  POST   | /certificates/request                      | JWT    | any   | User requests certificate
+  GET    | /certificates/my                           | JWT    | any   | User's issued certificates
+  GET    | /certificates/my/requests                  | JWT    | any   | User's certificate requests
+  GET    | /admin/certificates/requests               | JWT    | admin | List all requests
+  GET    | /admin/certificates/issued                 | JWT    | admin | List all issued certs
+  POST   | /admin/certificates/:requestId/approve     | JWT    | admin | Approve + generate cert
+  POST   | /admin/certificates/:requestId/reject      | JWT    | admin | Reject a request
+  POST   | /admin/certificates/issue-direct           | JWT    | admin | Direct issue (no request)
+  GET    | /archive/:certificateId                    | PUBLIC | none  | Verify certificate (QR)
+  POST   | /admin/certificate-templates               | JWT    | admin | Upload/create a template
+  GET    | /admin/certificate-templates               | JWT    | admin | List all templates
+  GET    | /admin/certificate-templates/:id           | JWT    | admin | Get template detail
+  PUT    | /admin/certificate-templates/:id/activate  | JWT    | admin | Activate a template
+  PUT    | /admin/certificate-templates/reset-default | JWT    | admin | Revert to built-in SVG
+  DELETE | /admin/certificate-templates/:id           | JWT    | admin | Delete a template
+
+
+================================================================================
+  SECTION 6 — CURL EXAMPLES
+================================================================================
+
+# 1. User requests a certificate
+curl -X POST https://api.theaspiringengineers.com/certificates/request \
+  -H "Authorization: Bearer <USER_JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "web-dev"}'
+
+# 2. User views their certificates
+curl https://api.theaspiringengineers.com/certificates/my \
+  -H "Authorization: Bearer <USER_JWT>"
+
+# 3. User views their requests
+curl https://api.theaspiringengineers.com/certificates/my/requests \
+  -H "Authorization: Bearer <USER_JWT>"
+
+# 4. Admin lists all pending requests
+curl "https://api.theaspiringengineers.com/admin/certificates/requests?status=pending" \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 5. Admin lists all issued certificates
+curl https://api.theaspiringengineers.com/admin/certificates/issued \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 5b. Admin lists issued certificates filtered by domain
+curl "https://api.theaspiringengineers.com/admin/certificates/issued?domain=web-dev" \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 6. Admin approves a request (generates certificate)
+curl -X POST https://api.theaspiringengineers.com/admin/certificates/6630a1f2e4b0c8d1234abcd1/approve \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 6. Admin rejects a request
+curl -X POST https://api.theaspiringengineers.com/admin/certificates/6630a1f2e4b0c8d1234abcd1/reject \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"rejectionReason": "Insufficient course completion"}'
+
+# 7. Admin directly issues a certificate (NEW - bypasses request flow)
+curl -X POST https://api.theaspiringengineers.com/admin/certificates/issue-direct \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "learner@example.com", "domain": "web-dev", "overrideName": "Ayush Rana"}'
+
+# 8. Public verification (QR scan destination)
+curl https://api.theaspiringengineers.com/archive/TAE-AB3XY7QZLM4N
+
+
+# ── TEMPLATE MANAGEMENT ──────────────────────────────────────────────────────
+
+# 9. Upload an image-background template
+curl -X POST https://api.theaspiringengineers.com/admin/certificate-templates \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Brand Template 2026", "mode": "image", "backgroundImageBase64": "data:image/png;base64,iVBORw0KGgo..."}'
+
+# 10. Upload an HTML template
+curl -X POST https://api.theaspiringengineers.com/admin/certificate-templates \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "HTML Layout v1", "mode": "html", "htmlTemplate": "<div style=\"width:1200px;height:850px;\"><h1>{{userName}}</h1></div>"}'
+
+# 11. List all templates
+curl https://api.theaspiringengineers.com/admin/certificate-templates \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 12. Get full template detail (includes htmlTemplate)
+curl https://api.theaspiringengineers.com/admin/certificate-templates/6640a1b2c3d4e5f6a7b8c9d0 \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 13. Activate a template (makes it live for all future certs)
+curl -X PUT https://api.theaspiringengineers.com/admin/certificate-templates/6640a1b2c3d4e5f6a7b8c9d0/activate \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 14. Reset to built-in default SVG
+curl -X PUT https://api.theaspiringengineers.com/admin/certificate-templates/reset-default \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+# 15. Delete a template
+curl -X DELETE https://api.theaspiringengineers.com/admin/certificate-templates/6640a1b2c3d4e5f6a7b8c9d0 \
+  -H "Authorization: Bearer <ADMIN_JWT>"
+
+
+================================================================================
+  END OF DOCUMENT
+================================================================================
