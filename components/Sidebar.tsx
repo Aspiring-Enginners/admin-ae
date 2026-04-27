@@ -28,6 +28,7 @@ import {
   Mail,
   Gift,
   MessageSquareQuote,
+  Award,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
@@ -118,6 +119,34 @@ const navItems: NavItem[] = [
     name: "Freelance",
     icon: BriefcaseBusiness,
     path: "/freelance",
+  },
+
+  // Certificates Group
+  {
+    name: "Certificates",
+    icon: Award,
+    items: [
+      {
+        name: "Pending Requests",
+        icon: ListChecks,
+        path: "/certificates/requests",
+      },
+      {
+        name: "Issued Certificates",
+        icon: Award,
+        path: "/certificates/issued",
+      },
+      {
+        name: "Issue Certificate",
+        icon: UserCheck,
+        path: "/certificates/issue-direct",
+      },
+      {
+        name: "Templates",
+        icon: ImageIcon,
+        path: "/certificates/templates",
+      },
+    ],
   },
   
   // Support Group
