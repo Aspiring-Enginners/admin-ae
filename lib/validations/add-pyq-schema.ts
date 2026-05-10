@@ -45,29 +45,45 @@ export const roundingModes = [
 
 export type RoundingMode = (typeof roundingModes)[number];
 
+const toNumberOrUndefined = (value: unknown) => {
+  if (value === "" || value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "number") {
+    return Number.isNaN(value) ? undefined : value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+
+  return value;
+};
+
 export const addPyqSchema = z
   .object({
     category: z.enum(questionCategories, {
       message: "Category is required",
     }),
     subject: z.enum(questionSubjects).optional(),
-    chapter: z.string().min(1, "Chapter is required"),
-    topic: z.string().min(1, "Topic is required"),
-    difficulty: z.enum(["easy", "medium", "hard"], {
-      message: "Difficulty is required",
-    }),
+    chapter: z.string().optional(),
+    topic: z.string().optional(),
+    difficulty: z.enum(["easy", "medium", "hard"]).optional(),
 
     // Validate that there's actual text content or math blocks, not just empty HTML tags
     question: z
       .string()
       .refine((val) => hasTextContent(val), "Question text is required"),
-    solution: z
-      .string()
-      .refine((val) => hasTextContent(val), "Solution is required"),
+    solution: z.string().optional(),
 
-    questionType: z.enum(questionTypes, {
-      message: "Question type is required",
-    }),
+    questionType: z.enum(questionTypes).optional(),
 
     // For MCQ / Single Correct
     options: z
@@ -83,16 +99,15 @@ export const addPyqSchema = z
       )
       .optional(),
 
-    // For Integer Type
-    integerAnswer: z.string().optional(),
-
-    // For Numerical Type
-    numericalAnswer: z.string().optional(),
-    tolerance: z.string().optional(),
-    roundingMode: z.enum(roundingModes).optional(),
+    // For Integer / Numerical Type
+    numericalAnswer: z.preprocess(
+      toNumberOrUndefined,
+      z.number().optional()
+    ),
+    tolerance: z.preprocess(toNumberOrUndefined, z.number().optional()),
   })
   .superRefine((data, ctx) => {
-    const { questionType } = data;
+    const questionType = data.questionType ?? "SINGLE_CORRECT";
 
     if (questionType === "SINGLE_CORRECT" || questionType === "MULTI_CORRECT") {
       if (!data.options || data.options.length < 2) {
@@ -125,58 +140,39 @@ export const addPyqSchema = z
     }
 
     if (questionType === "INTEGER") {
-      if (!data.integerAnswer || data.integerAnswer.trim() === "") {
+      if (data.numericalAnswer === undefined) {
         ctx.addIssue({
-          path: ["integerAnswer"],
+          path: ["numericalAnswer"],
           code: z.ZodIssueCode.custom,
-          message: "Integer answer is required",
+          message: "Answer is required",
         });
-      } else if (!/^-?\d+$/.test(data.integerAnswer.trim())) {
+      } else if (!Number.isInteger(data.numericalAnswer)) {
         ctx.addIssue({
-          path: ["integerAnswer"],
+          path: ["numericalAnswer"],
           code: z.ZodIssueCode.custom,
-          message: "Answer must be a valid integer",
+          message: "Answer must be a whole number",
         });
       }
     }
 
     if (questionType === "NUMERICAL") {
-      if (!data.numericalAnswer || data.numericalAnswer.trim() === "") {
+      if (data.numericalAnswer === undefined) {
         ctx.addIssue({
           path: ["numericalAnswer"],
           code: z.ZodIssueCode.custom,
-          message: "Numerical answer is required",
-        });
-      } else if (isNaN(Number(data.numericalAnswer))) {
-        ctx.addIssue({
-          path: ["numericalAnswer"],
-          code: z.ZodIssueCode.custom,
-          message: "Answer must be a valid number",
+          message: "Answer is required",
         });
       }
 
-      if (!data.tolerance || data.tolerance.trim() === "") {
-        ctx.addIssue({
-          path: ["tolerance"],
-          code: z.ZodIssueCode.custom,
-          message: "Tolerance is required",
-        });
-      } else if (isNaN(Number(data.tolerance)) || Number(data.tolerance) < 0) {
+      if (data.tolerance !== undefined && data.tolerance < 0) {
         ctx.addIssue({
           path: ["tolerance"],
           code: z.ZodIssueCode.custom,
           message: "Tolerance must be a non-negative number",
         });
       }
-
-      if (!data.roundingMode) {
-        ctx.addIssue({
-          path: ["roundingMode"],
-          code: z.ZodIssueCode.custom,
-          message: "Rounding mode is required",
-        });
-      }
     }
   });
 
-export type AddPyqFormValues = z.infer<typeof addPyqSchema>;
+export type AddPyqFormInput = z.input<typeof addPyqSchema>;
+export type AddPyqFormValues = z.output<typeof addPyqSchema>;

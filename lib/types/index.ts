@@ -99,6 +99,8 @@ export interface Question {
   options: { text: string; imageBase64?: string; imageUrl?: string }[];
   correctAnswer?: string;
   correctAnswers?: string[];
+  numericalAnswer?: number;
+  tolerance?: number;
   solutionText: string;
   questionImageBase64?: string | null;
   questionImageUrl?: string | null;
@@ -113,17 +115,20 @@ export interface Question {
 export interface CreateQuestionPayload {
   category: string;
   subject?: QuestionSubject;
-  chapter: string;
-  topic: string;
+  chapter?: string;
+  topic?: string;
   questionText: string;
   questionType?: 'single-correct' | 'multiple-correct' | 'integer' | 'numerical';
-  options: { text: string; imageBase64?: string }[];
-  correctAnswer: string;
-  solutionText: string;
+  options?: { text: string; imageBase64?: string }[];
+  correctAnswer?: string;
+  correctAnswers?: string[];
+  numericalAnswer?: number;
+  tolerance?: number;
+  solutionText?: string;
   questionImageBase64?: string | null;
   solutionImageBase64?: string | null;
-  difficulty: 'easy' | 'medium' | 'hard';
-  metadata: QuestionMetadata;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  metadata?: QuestionMetadata;
 }
 
 export interface CreateQuestionResponse {
