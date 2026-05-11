@@ -3,9 +3,9 @@
 
 import { useFieldArray, Control, UseFormRegister, Controller, useFormContext, useWatch } from "react-hook-form";
 import {
+  AddPyqFormInput,
   AddPyqFormValues,
   QuestionType,
-  roundingModes,
 } from "@/lib/validations/add-pyq-schema";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,8 @@ import Image from "next/image";
 import React from "react";
 
 interface QuestionTypeSectionProps {
-  control: Control<AddPyqFormValues>;
-  register: UseFormRegister<AddPyqFormValues>;
+  control: Control<AddPyqFormInput, any, AddPyqFormValues>;
+  register: UseFormRegister<AddPyqFormInput>;
   questionType: QuestionType;
   setQuestionType: (type: QuestionType) => void;
   errors: any;
@@ -45,7 +45,7 @@ export function QuestionTypeSection({
   });
 
   // Get setValue from the form to do surgical updates
-  const { setValue, getValues } = useFormContext<AddPyqFormValues>();
+  const { setValue } = useFormContext<AddPyqFormInput, any, AddPyqFormValues>();
 
   // Watch options to get live isCorrect/imageBase64 values for re-rendering
   const watchedOptions = useWatch({ control, name: "options" });
@@ -211,15 +211,17 @@ export function QuestionTypeSection({
 
       {questionType === "INTEGER" && (
         <div className="space-y-2">
-          <Label htmlFor="integerAnswer">Integer Answer</Label>
+          <Label htmlFor="numericalAnswer">Integer Answer</Label>
           <Input
-            id="integerAnswer"
+            id="numericalAnswer"
             placeholder="e.g. 5"
-            {...register("integerAnswer")}
+            type="number"
+            step="1"
+            {...register("numericalAnswer", { valueAsNumber: true })}
           />
-          {errors.integerAnswer && (
+          {errors.numericalAnswer && (
             <p className="text-xs text-destructive">
-              {errors.integerAnswer.message}
+              {errors.numericalAnswer.message}
             </p>
           )}
         </div>
@@ -232,7 +234,9 @@ export function QuestionTypeSection({
             <Input
               id="numericalAnswer"
               placeholder="e.g. 3.142"
-              {...register("numericalAnswer")}
+              type="number"
+              step="any"
+              {...register("numericalAnswer", { valueAsNumber: true })}
             />
             {errors.numericalAnswer && (
               <p className="text-xs text-destructive">
@@ -247,35 +251,13 @@ export function QuestionTypeSection({
               <Input
                 id="tolerance"
                 placeholder="e.g. 0.01"
-                {...register("tolerance")}
+                type="number"
+                step="any"
+                {...register("tolerance", { valueAsNumber: true })}
               />
               {errors.tolerance && (
                 <p className="text-xs text-destructive">
                   {errors.tolerance.message}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Rounding Mode</Label>
-              <Select
-                onValueChange={(v) => (control._formValues.roundingMode = v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select rounding mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roundingModes.map((mode) => (
-                    <SelectItem key={mode} value={mode}>
-                      {mode.replace("_", " ").toLowerCase()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <input type="hidden" {...register("roundingMode")} />
-              {errors.roundingMode && (
-                <p className="text-xs text-destructive">
-                  {errors.roundingMode.message}
                 </p>
               )}
             </div>

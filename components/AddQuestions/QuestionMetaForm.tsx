@@ -2,7 +2,7 @@
 "use client";
 
 import { Control, Controller, FieldErrors, UseFormRegister, useWatch } from "react-hook-form";
-import { AddPyqFormValues } from "@/lib/validations/add-pyq-schema";
+import { AddPyqFormInput, AddPyqFormValues } from "@/lib/validations/add-pyq-schema";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,9 +16,9 @@ import { AlertCircle } from "lucide-react";
 import { VALID_SUBJECTS_BY_CATEGORY, QuestionCategory } from "@/lib/types";
 
 interface QuestionMetaFormProps {
-  register: UseFormRegister<AddPyqFormValues>;
-  control: Control<AddPyqFormValues>;
-  errors: FieldErrors<AddPyqFormValues>;
+  register: UseFormRegister<AddPyqFormInput>;
+  control: Control<AddPyqFormInput, any, AddPyqFormValues>;
+  errors: FieldErrors<AddPyqFormInput>;
 }
 
 export function QuestionMetaForm({
@@ -37,8 +37,8 @@ export function QuestionMetaForm({
       <div className="col-span-full mb-2 flex items-start gap-3 rounded-md border border-yellow-500/20 bg-yellow-500/10 p-3 text-yellow-600 dark:text-yellow-500">
         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
         <div className="text-sm">
-          <p className="font-semibold">Important: Exact Names Required</p>
-          <p>Please ensure you fill in the <strong>Chapter</strong> and <strong>Topic</strong> names correctly exactly as they appear in the curriculum. Proper matching ensures topics are correctly linked and filterable.</p>
+          <p className="font-semibold">Important: Only category and question text are required</p>
+          <p>Subject, chapter, topic, and difficulty are optional metadata. Add them when available to improve filtering and organization.</p>
         </div>
       </div>
 

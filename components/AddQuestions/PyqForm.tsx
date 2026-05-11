@@ -1,4 +1,3 @@
-// components/add-pyq/AddPyqForm.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,6 +5,7 @@ import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   addPyqSchema,
+  AddPyqFormInput,
   AddPyqFormValues,
   QuestionType,
 } from "@/lib/validations/add-pyq-schema";
@@ -21,6 +21,7 @@ import { questionService } from "@/lib/services/question.service";
 import { CreateQuestionPayload } from "@/lib/types";
 import { X } from "lucide-react";
 import { logger } from "@/lib/logger";
+import { hasTextContent } from "@/lib/utils/htmlUtils";
 
 // LocalStorage keys
 const STORAGE_KEY = "pyq-form-metadata";
@@ -34,9 +35,6 @@ interface SavedMetadata {
 }
 
 export function AddPyqForm() {
-  const [questionType, setQuestionType] =
-    useState<QuestionType>("SINGLE_CORRECT");
-
   const [questionImageBase64, setQuestionImageBase64] = useState<string | null>(null);
   const [solutionImageBase64, setSolutionImageBase64] = useState<string | null>(null);
 
@@ -53,7 +51,7 @@ export function AddPyqForm() {
 
   const savedMetadata = loadSavedMetadata();
 
-  const methods = useForm<AddPyqFormValues>({
+  const methods = useForm<AddPyqFormInput, any, AddPyqFormValues>({
     resolver: zodResolver(addPyqSchema),
     defaultValues: {
       category: (savedMetadata.category as any) || "jee-main",
@@ -70,6 +68,8 @@ export function AddPyqForm() {
         { id: crypto.randomUUID(), text: "", isCorrect: false, imageBase64: "" },
         { id: crypto.randomUUID(), text: "", isCorrect: false, imageBase64: "" },
       ],
+      numericalAnswer: undefined,
+      tolerance: undefined,
     },
     mode: "onBlur",
   });
@@ -79,6 +79,7 @@ export function AddPyqForm() {
     control,
     handleSubmit,
     setValue,
+    clearErrors,
     formState: { errors, isSubmitting },
     reset,
     watch,
@@ -86,6 +87,7 @@ export function AddPyqForm() {
 
   const questionValue = watch("question");
   const solutionValue = watch("solution");
+  const questionType = watch("questionType") ?? "SINGLE_CORRECT";
   const category = watch("category");
   const subject = watch("subject");
   const chapter = watch("chapter");
@@ -128,39 +130,33 @@ export function AddPyqForm() {
     }
   };
 
-  const onSubmit = async (data: AddPyqFormValues) =>
-    {
+  const onSubmit = async (data: AddPyqFormValues) => {
     try {
       // Map form data to API payload format
-      let correctAnswer = "";
+      const questionType = data.questionType ?? "SINGLE_CORRECT";
       let optionsArray: { text: string; imageBase64?: string }[] = [];
+      let correctAnswer: string | undefined;
+      let correctAnswers: string[] | undefined;
 
-      if (data.questionType === "SINGLE_CORRECT" || data.questionType === "MULTI_CORRECT") {
+      if (questionType === "SINGLE_CORRECT" || questionType === "MULTI_CORRECT") {
         // For MCQ questions - map to { text, imageBase64 } format expected by backend
         optionsArray = data.options?.map((opt) => ({
           text: opt.text,
           ...(opt.imageBase64 ? { imageBase64: opt.imageBase64 } : {})
         })) || [];
 
-        if (data.questionType === "SINGLE_CORRECT") {
+        if (questionType === "SINGLE_CORRECT") {
           // Find the index of the correct option (A, B, C, D...)
           const correctIndex = data.options?.findIndex((opt) => opt.isCorrect);
           correctAnswer = correctIndex !== undefined && correctIndex !== -1
             ? String.fromCharCode(65 + correctIndex) // 65 is 'A'
             : "A";
         } else {
-          // For multi-correct, send comma-separated indices
-          const correctIndices = data.options
+          // For multi-correct, send an array of option labels
+          correctAnswers = data.options
             ?.map((opt, idx) => (opt.isCorrect ? String.fromCharCode(65 + idx) : null))
-            .filter((v) => v !== null);
-          correctAnswer = correctIndices?.join(",") || "A";
+            .filter((v): v is string => v !== null);
         }
-      } else if (data.questionType === "INTEGER") {
-        correctAnswer = data.integerAnswer || "0";
-        optionsArray = [];
-      } else if (data.questionType === "NUMERICAL") {
-        correctAnswer = data.numericalAnswer || "0";
-        optionsArray = [];
       }
 
       const typeMap: Record<string, string> = {
@@ -172,17 +168,26 @@ export function AddPyqForm() {
 
       const payload: CreateQuestionPayload = {
         category: data.category,
-        subject: data.subject as any,
-        chapter: data.chapter,
-        topic: data.topic,
-        questionType: typeMap[data.questionType] as any,
         questionText: data.question,
-        options: optionsArray,
-        correctAnswer,
-        solutionText: data.solution,
-        questionImageBase64: questionImageBase64,
-        solutionImageBase64: solutionImageBase64,
-        difficulty: data.difficulty as any, // Form now sends lowercase
+        questionType: typeMap[questionType] as any,
+        ...(data.subject ? { subject: data.subject as any } : {}),
+        ...(data.chapter?.trim() ? { chapter: data.chapter.trim() } : {}),
+        ...(data.topic?.trim() ? { topic: data.topic.trim() } : {}),
+        ...(data.difficulty ? { difficulty: data.difficulty as any } : {}),
+        ...(hasTextContent(data.solution || "") ? { solutionText: data.solution } : {}),
+        ...(questionImageBase64 ? { questionImageBase64 } : {}),
+        ...(solutionImageBase64 ? { solutionImageBase64 } : {}),
+        ...(questionType === "SINGLE_CORRECT" || questionType === "MULTI_CORRECT"
+          ? { options: optionsArray }
+          : {}),
+        ...(correctAnswer ? { correctAnswer } : {}),
+        ...(correctAnswers ? { correctAnswers } : {}),
+        ...(questionType === "INTEGER" || questionType === "NUMERICAL"
+          ? { numericalAnswer: data.numericalAnswer }
+          : {}),
+        ...(questionType === "NUMERICAL" && data.tolerance !== undefined
+          ? { tolerance: data.tolerance }
+          : {}),
         metadata: {
           marks: 4, // Default marks, can be made configurable
           year: new Date().getFullYear(),
@@ -214,10 +219,8 @@ export function AddPyqForm() {
               { id: crypto.randomUUID(), text: "", isCorrect: false, imageBase64: "" },
             ]
             : [],
-        integerAnswer: "",
-        numericalAnswer: "",
-        tolerance: "",
-        roundingMode: undefined,
+        numericalAnswer: undefined,
+        tolerance: undefined,
       });
       setQuestionImageBase64(null);
       setSolutionImageBase64(null);
@@ -233,10 +236,25 @@ export function AddPyqForm() {
     }
   };
 
-  const onError = () => {
-    toast.error("Please fix the validation errors before saving", {
-      position: "bottom-center",
-    });
+  const onError = (formErrors: typeof errors) => {
+    const messages: string[] = [];
+
+    if (formErrors.category) messages.push(`Category: ${formErrors.category.message}`);
+    if (formErrors.question) messages.push(`Question: ${formErrors.question.message}`);
+    if (formErrors.solution) messages.push(`Solution: ${formErrors.solution.message}`);
+    if (formErrors.questionType) messages.push(`Question type: ${formErrors.questionType.message}`);
+    if (formErrors.numericalAnswer) messages.push(`Answer: ${formErrors.numericalAnswer.message}`);
+    if (formErrors.tolerance) messages.push(`Tolerance: ${formErrors.tolerance.message}`);
+    if (formErrors.options?.message) messages.push(`Options: ${formErrors.options.message}`);
+
+    toast.error(
+      messages.length > 0
+        ? messages.slice(0, 3).join(" | ")
+        : "Please fix the validation errors before saving",
+      {
+        position: "bottom-center",
+      }
+    );
   };
 
   return (
@@ -314,8 +332,32 @@ export function AddPyqForm() {
               register={register}
               questionType={questionType}
               setQuestionType={(t) => {
-                setQuestionType(t);
                 setValue("questionType", t, { shouldValidate: true });
+                if (t === "INTEGER" || t === "NUMERICAL") {
+                  setValue("options", [] as any, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                }
+                if (t === "SINGLE_CORRECT" || t === "MULTI_CORRECT") {
+                  const currentOptions = methods.getValues("options");
+                  if (!currentOptions || currentOptions.length === 0) {
+                    setValue(
+                      "options",
+                      [
+                        { id: crypto.randomUUID(), text: "", isCorrect: false, imageBase64: "" },
+                        { id: crypto.randomUUID(), text: "", isCorrect: false, imageBase64: "" },
+                        { id: crypto.randomUUID(), text: "", isCorrect: false, imageBase64: "" },
+                        { id: crypto.randomUUID(), text: "", isCorrect: false, imageBase64: "" },
+                      ] as any,
+                      {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      }
+                    );
+                  }
+                }
+                clearErrors(["options", "numericalAnswer", "tolerance"]);
               }}
               errors={errors}
             />
